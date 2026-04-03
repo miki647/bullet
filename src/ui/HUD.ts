@@ -28,6 +28,7 @@ export class HUD {
   private chainBarEl: HTMLElement;
   private chainTextEl: HTMLElement;
   private hpBarEl: HTMLElement;
+  private waveAnnounceEl: HTMLElement;
   private chainTextTimer = 0;
 
   constructor() {
@@ -52,6 +53,7 @@ export class HUD {
         <div id="hud-chain-bar-bg"><div id="hud-chain-bar"></div></div>
       </div>
       <div id="hud-chain-text"></div>
+      <div id="hud-wave-announce"></div>
     `;
     this.container.appendChild(hud);
 
@@ -62,6 +64,7 @@ export class HUD {
     this.chainBarEl = document.getElementById('hud-chain-bar')!;
     this.chainTextEl = document.getElementById('hud-chain-text')!;
     this.hpBarEl = document.getElementById('hud-hp-bar')!;
+    this.waveAnnounceEl = document.getElementById('hud-wave-announce')!;
   }
 
   show(): void { this.hudEl.style.display = 'block'; }
@@ -136,6 +139,15 @@ export class HUD {
     this.chainTextEl.style.opacity = '1';
     this.chainTextEl.style.transform = 'translate(-50%, -50%) scale(1)';
     this.chainTextTimer = 1.2; // show for 1.2 seconds
+  }
+
+  showWaveAnnounce(wave: number): void {
+    this.waveAnnounceEl.textContent = `WAVE ${wave}`;
+    this.waveAnnounceEl.classList.add('visible');
+  }
+
+  hideWaveAnnounce(): void {
+    this.waveAnnounceEl.classList.remove('visible');
   }
 }
 
@@ -234,5 +246,26 @@ const HUD_CSS = `
   opacity: 0;
   transition: opacity 0.3s ease-out, transform 0.3s ease-out;
   text-transform: uppercase;
+}
+
+#hud-wave-announce {
+  position: absolute;
+  top: 45%;
+  left: 50%;
+  transform: translate(-50%, -50%) scale(1.5);
+  font-size: 72px;
+  font-weight: 900;
+  color: #00ffff;
+  letter-spacing: 8px;
+  opacity: 0;
+  text-shadow: 0 0 30px #00ffff, 0 0 60px #00ffff, 0 0 120px #0088ff;
+  text-transform: uppercase;
+  pointer-events: none;
+  transition: opacity 0.4s ease-out, transform 0.4s ease-out;
+}
+
+#hud-wave-announce.visible {
+  opacity: 1;
+  transform: translate(-50%, -50%) scale(1);
 }
 `;

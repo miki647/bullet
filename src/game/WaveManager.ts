@@ -22,7 +22,11 @@ const WAVE_DEFS: WaveDefinition[] = [
 const WAVE_REST_TIME = 3; // seconds between waves
 const SPAWN_MARGIN = 60;  // units outside visible edge
 
+const SUCTION_DURATION = 0.5;
+const TEXT_DURATION = 1.5;
+
 type SpawnEntry = { type: 'chaser' | 'swarm' | 'tank' };
+export type TransitionPhase = 'none' | 'suction' | 'burst' | 'text' | 'rest';
 
 export class WaveManager {
   private waveNumber = 0;
@@ -34,6 +38,12 @@ export class WaveManager {
   private spawnTimer = 0;
   private spawnInterval = 0;
 
+  // --- Wave transition state machine ---
+  private _transitionPhase: TransitionPhase = 'none';
+  private transitionTimer = 0;
+  /** True on the exact frame a phase just started (consumed by Game.ts). */
+  private _phaseJustStarted = false;
+
   private enemyManager: EnemyManager;
 
   constructor(enemyManager: EnemyManager) {
@@ -42,6 +52,32 @@ export class WaveManager {
   }
 
   update(dt: number, enemyCount: number): void {
+    // --- Transition state machine ---
+    if (this._transitionPhase !== 'none') {
+      this._phaseJustStarted = false;
+      this.transitionTimer -= dt;
+
+      if (this.transitionTimer <= 0) {
+        switch (this._transitionPhase) {
+          case 'suction':
+            this.setPhase('burst');
+            break;
+          case 'burst':
+            // burst is instant — transition immediately to text
+            this.setPhase('text', TEXT_DURATION);
+            break;
+          case 'text':
+            this.setPhase('rest', WAVE_REST_TIME - SUCTION_DURATION - TEXT_DURATION);
+            break;
+          case 'rest':
+            this._transitionPhase = 'none';
+            this.startNextWave();
+            break;
+        }
+      }
+      return;
+    }
+
     if (this.inRest) {
       this.restTimer -= dt;
       if (this.restTimer <= 0) {
@@ -59,11 +95,21 @@ export class WaveManager {
       }
     }
 
-    // Wave complete: all spawned and all dead
+    // Wave complete: all spawned and all dead → begin transition
     if (this.spawnQueue.length === 0 && enemyCount === 0) {
-      this.inRest = true;
-      this.restTimer = WAVE_REST_TIME;
+      this.beginWaveTransition();
     }
+  }
+
+  private beginWaveTransition(): void {
+    this.inRest = false;
+    this.setPhase('suction', SUCTION_DURATION);
+  }
+
+  private setPhase(phase: TransitionPhase, duration = 0): void {
+    this._transitionPhase = phase;
+    this.transitionTimer = duration;
+    this._phaseJustStarted = true;
   }
 
   private startNextWave(): void {
@@ -149,6 +195,16 @@ export class WaveManager {
     return Math.max(0, this.restTimer);
   }
 
+  get transitionPhase(): TransitionPhase {
+    return this._transitionPhase;
+  }
+
+  get phaseJustStarted(): boolean {
+    const v = this._phaseJustStarted;
+    this._phaseJustStarted = false;
+    return v;
+  }
+
   reset(): void {
     this.waveNumber = 0;
     this.restTimer = 1.5;
@@ -156,5 +212,8 @@ export class WaveManager {
     this.spawnQueue = [];
     this.spawnTimer = 0;
     this.spawnInterval = 0;
+    this._transitionPhase = 'none';
+    this.transitionTimer = 0;
+    this._phaseJustStarted = false;
   }
 }

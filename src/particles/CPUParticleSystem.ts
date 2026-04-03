@@ -205,6 +205,9 @@ export class CPUParticleSystem {
     const damping = Math.pow(this.DAMPING, dt * 60); // frame-rate independent damping
     const gravDt = this.GRAVITY * dt;
 
+    // Apply attractor force before main physics loop
+    this.applyAttractor(dt);
+
     const posArr = this.posAttr.array as Float32Array;
     const colArr = this.colAttr.array as Float32Array;
     const sizeArr = this.sizeAttr.array as Float32Array;
@@ -301,6 +304,39 @@ export class CPUParticleSystem {
     tmp = this.baseG[a]; this.baseG[a] = this.baseG[b]; this.baseG[b] = tmp;
     tmp = this.baseB[a]; this.baseB[a] = this.baseB[b]; this.baseB[b] = tmp;
     tmp = this.bSize[a]; this.bSize[a] = this.bSize[b]; this.bSize[b] = tmp;
+  }
+
+  // --- Attractor system ---
+  private attractX = 0;
+  private attractY = 0;
+  private attractStrength = 0;
+
+  setAttractor(x: number, y: number, strength: number): void {
+    this.attractX = x;
+    this.attractY = y;
+    this.attractStrength = strength;
+  }
+
+  clearAttractor(): void {
+    this.attractStrength = 0;
+  }
+
+  /** Applies attractor force to all active particles during update. */
+  applyAttractor(dt: number): void {
+    if (this.attractStrength <= 0) return;
+    const str = this.attractStrength;
+    const ax = this.attractX;
+    const ay = this.attractY;
+
+    for (let i = 0; i < this._activeCount; i++) {
+      const dx = ax - this.posX[i];
+      const dy = ay - this.posY[i];
+      const distSq = dx * dx + dy * dy + 1; // +1 to avoid division by zero
+      const dist = Math.sqrt(distSq);
+      const force = str / dist; // inversely proportional
+      this.velX[i] += (dx / dist) * force * dt;
+      this.velY[i] += (dy / dist) * force * dt;
+    }
   }
 
   get activeCount(): number {

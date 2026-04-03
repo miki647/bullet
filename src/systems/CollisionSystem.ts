@@ -3,12 +3,15 @@ import { EnemyManager, type EnemyData } from '../entities/Enemy';
 
 const PLAYER_RADIUS = 16; // player collision radius (smaller than visual for fairness)
 const BULLET_RADIUS = 8;
+const NEAR_MISS_EXTRA = 30; // extra distance beyond enemy radius for near-miss detection
 
 export interface CollisionEvent {
-  type: 'bullet_enemy' | 'bullet_enemy_hit' | 'enemy_player';
+  type: 'bullet_enemy' | 'bullet_enemy_hit' | 'enemy_player' | 'bullet_near_miss';
   enemyX: number;
   enemyY: number;
   enemyType: EnemyData['type'];
+  /** For near miss: the enemy data reference (to flashGlow). */
+  enemyRef?: EnemyData;
 }
 
 export class CollisionSystem {
@@ -89,6 +92,41 @@ export class CollisionSystem {
         });
         enemyManager.kill(e);
         // Player damage will be handled by Game/GameState in later steps
+      }
+    }
+
+    // Bullet near-miss detection (per bullet, closest enemy only)
+    for (let bi = bullets.length - 1; bi >= 0; bi--) {
+      const b = bullets[bi];
+      if (!b.active) continue;
+
+      let closestDist = Infinity;
+      let closestEnemy: EnemyData | null = null;
+
+      for (let ei = enemies.length - 1; ei >= 0; ei--) {
+        const e = enemies[ei];
+        if (!e.active) continue;
+
+        const dx = b.posX - e.posX;
+        const dy = b.posY - e.posY;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        const threshold = e.radius + NEAR_MISS_EXTRA;
+
+        // Only consider enemies outside hit range but inside near-miss range
+        if (dist > e.radius + BULLET_RADIUS && dist < threshold && dist < closestDist) {
+          closestDist = dist;
+          closestEnemy = e;
+        }
+      }
+
+      if (closestEnemy) {
+        this.events.push({
+          type: 'bullet_near_miss',
+          enemyX: closestEnemy.posX,
+          enemyY: closestEnemy.posY,
+          enemyType: closestEnemy.type,
+          enemyRef: closestEnemy,
+        });
       }
     }
 

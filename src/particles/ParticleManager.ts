@@ -135,4 +135,12 @@ export class ParticleManager {
   get maxCapacity(): number {
     return this.maxParticles;
   }
+
+  setAttractor(x: number, y: number, strength: number): void {
+    this.system.setAttractor(x, y, strength);
+  }
+
+  clearAttractor(): void {
+    this.system.clearAttractor();
+  }
 }

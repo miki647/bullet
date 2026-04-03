@@ -4,13 +4,14 @@ import { InputSystem } from '../systems/InputSystem';
 import { Player } from '../entities/Player';
 import { BulletManager } from '../entities/Bullet';
 import { EnemyManager } from '../entities/Enemy';
-import { WaveManager } from './WaveManager';
+import { WaveManager, type TransitionPhase } from './WaveManager';
 import { CollisionSystem } from '../systems/CollisionSystem';
 import { EngineTrail } from '../effects/EngineTrail';
 import { HitFlash } from '../effects/HitFlash';
 import { ScreenShake } from '../effects/ScreenShake';
 import { SlowMotion } from '../effects/SlowMotion';
 import { ShockwaveRing } from '../effects/ShockwaveRing';
+import { TankDebris } from '../effects/TankDebris';
 import { CameraSystem } from '../systems/CameraSystem';
 import { NeonGrid } from '../rendering/NeonGrid';
 import { StarField } from '../rendering/StarField';
@@ -52,10 +53,12 @@ export class Game {
   private screenShake!: ScreenShake;
   private slowMotion!: SlowMotion;
   private shockwaveRing!: ShockwaveRing;
+  private tankDebris!: TankDebris;
   private cameraSystem!: CameraSystem;
 
   private lastTime = 0;
   private elapsed = 0;
+  private lastTransitionPhase: TransitionPhase = 'none';
 
   // Game area size (logical units)
   static readonly WORLD_WIDTH = 1920;
@@ -82,6 +85,8 @@ export class Game {
     this.slowMotion = new SlowMotion();
     this.shockwaveRing = new ShockwaveRing();
     this.scene.add(this.shockwaveRing.group);
+    this.tankDebris = new TankDebris();
+    this.scene.add(this.tankDebris.group);
     this.cameraSystem = new CameraSystem(this.camera);
 
     // Game state & UI screens
@@ -245,6 +250,7 @@ export class Game {
     this.particleManager.update(dt, dt * 1000);
     HitFlash.update(dt);
     this.shockwaveRing.update(dt);
+    this.tankDebris.update(dt);
 
     // Camera: look-ahead + dynamic zoom → then screen shake on top
     const camBase = this.cameraSystem.update(
@@ -281,6 +287,7 @@ export class Game {
 
     // Wave spawning & enemy AI
     this.waveManager.update(dt, this.enemyManager.activeCount);
+    this.handleWaveTransition();
     this.enemyManager.update(dt, this.player.position.x, this.player.position.y);
 
     // Collision detection
@@ -314,6 +321,11 @@ export class Game {
         this.enemyManager.applyVisualKnockback(ex, ey);
         this.bulletManager.applyVisualKnockback(ex, ey);
 
+        // Tank debris on kill
+        if (event.enemyType === 'tank') {
+          this.tankDebris.trigger(ex, ey);
+        }
+
         // Micro flash
         this.postProcessing.triggerKillFlash();
 
@@ -332,6 +344,15 @@ export class Game {
         } else if (chain >= 3) {
           this.slowMotion.trigger(0.5, 0.4);
         }
+      }
+      if (event.type === 'bullet_enemy_hit') {
+        // Non-lethal hit — trigger Tank hit pulse
+        if (event.enemyType === 'tank') {
+          this.enemyManager.triggerHitPulse(event.enemyX, event.enemyY);
+        }
+      }
+      if (event.type === 'bullet_near_miss' && event.enemyRef) {
+        this.enemyManager.flashGlow(event.enemyRef);
       }
       if (event.type === 'enemy_player') {
         const damaged = this.player.takeDamage();
@@ -386,6 +407,7 @@ export class Game {
       enemies: this.enemyManager.activeCount,
       wave: this.waveManager.currentWave,
       resting: this.waveManager.isResting,
+      transition: this.waveManager.transitionPhase,
       bullets: this.bulletManager.activeCount,
       particles: this.particleManager.activeCount,
       emitScale: this.particleManager.emitScale,
@@ -394,5 +416,50 @@ export class Game {
       chain: this.scoreSystem.chainMultiplier,
       maxChain: this.scoreSystem.maxChain,
     };
+  }
+
+  // ─── Wave transition orchestration ──────────────────────
+
+  private handleWaveTransition(): void {
+    const phase = this.waveManager.transitionPhase;
+    if (phase === this.lastTransitionPhase) return;
+
+    const prevPhase = this.lastTransitionPhase;
+    this.lastTransitionPhase = phase;
+
+    switch (phase) {
+      case 'suction':
+        // Pull all particles toward screen center
+        this.particleManager.setAttractor(0, 0, 800);
+        break;
+
+      case 'burst': {
+        // Central shockwave burst
+        this.particleManager.clearAttractor();
+        this.shockwaveRing.trigger(0, 0, new THREE.Color(0x00ffff));
+        this.neonGrid.addShockwave(0, 0);
+        this.screenShake.trigger(15, 0.3);
+        this.postProcessing.triggerKillFlash();
+        break;
+      }
+
+      case 'text':
+        // Show wave announcement (next wave number)
+        this.hud.showWaveAnnounce(this.waveManager.currentWave + 1);
+        break;
+
+      case 'rest':
+        // Hide wave announcement
+        this.hud.hideWaveAnnounce();
+        break;
+
+      case 'none':
+        // Transition ended — cleanup
+        if (prevPhase !== 'none') {
+          this.hud.hideWaveAnnounce();
+          this.particleManager.clearAttractor();
+        }
+        break;
+    }
   }
 }

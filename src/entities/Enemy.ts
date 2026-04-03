@@ -51,6 +51,7 @@ export interface EnemyData {
   visualOffsetX: number;
   visualOffsetY: number;
   hitPulseTimer: number;
+  flashGlowTimer: number;
 }
 
 // ─── EnemyManager ───────────────────────────────────────────
@@ -171,6 +172,7 @@ export class EnemyManager {
       visualOffsetX: 0,
       visualOffsetY: 0,
       hitPulseTimer: 0,
+      flashGlowTimer: 0,
     };
   }
 
@@ -301,6 +303,17 @@ export class EnemyManager {
       const decay = Math.pow(0.9, dt * 60);
       e.visualOffsetX *= decay;
       e.visualOffsetY *= decay;
+
+      // FlashGlow decay: increase glow layer opacity temporarily
+      if (e.flashGlowTimer > 0) {
+        e.flashGlowTimer = Math.max(0, e.flashGlowTimer - dt);
+        const glowChild = e.mesh.children[3] as THREE.LineLoop | undefined;
+        if (glowChild?.material) {
+          const mat = glowChild.material as THREE.LineBasicMaterial;
+          const t = e.flashGlowTimer / 0.1; // 0.1s total duration
+          mat.opacity = 0.15 + 0.35 * t; // 0.5 → 0.15
+        }
+      }
 
       // Mesh position sync (includes visual offset)
       e.mesh.position.x = e.posX + e.visualOffsetX;
@@ -556,6 +569,12 @@ export class EnemyManager {
         break;
       }
     }
+  }
+
+  /** Flash the glow layer of a specific enemy (near-miss feedback). */
+  flashGlow(enemy: EnemyData): void {
+    if (!enemy.active) return;
+    enemy.flashGlowTimer = 0.1;
   }
 
   kill(enemy: EnemyData): void {
