@@ -1,0 +1,23 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm create:*)",
+      "Bash(npx --yes create-vite@latest temp-setup --template vanilla-ts)",
+      "Bash(cp temp-setup/package.json .)",
+      "Bash(cp temp-setup/tsconfig.json .)",
+      "Bash(cp temp-setup/vite.config.ts .)",
+      "Bash(rm -rf temp-setup)",
+      "Bash(npm install:*)",
+      "Bash(npm ls:*)",
+      "mcp__Claude_Preview__preview_start",
+      "Bash(mkdir -p public/sprites)",
+      "Bash(curl -L -o /tmp/kenney-space.zip \"https://kenney.nl/media/pages/assets/space-shooter-redux/65eca726c3-1696945670/kenney_space-shooter-redux.zip\")",
+      "Read(//tmp/**)",
+      "Bash(unzip -l /tmp/kenney-space.zip)",
+      "Bash(curl -L -o /tmp/kenney-space.zip \"https://github.com/kenney/kenney-assets/raw/main/Space%20Shooter%20Redux/space-shooter-redux.zip\")",
+      "Bash(grep -E \"\\\\.\\(json|html\\)$\")",
+      "Bash(npx tsc:*)",
+      "Bash(npx vite:*)"
+    ]
+  }
+}
