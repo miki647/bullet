@@ -314,10 +314,13 @@ export class Game {
     this.handleWaveTransition();
     this.enemyManager.update(dt, this.player.position.x, this.player.position.y);
 
-    // Spawn tank bullets from fire requests
-    for (const req of this.enemyManager.tankFireRequests) {
-      this.tankBulletManager.fire(req.x, req.y, req.angle);
+    // Spawn tank bullets from fire requests (sound once per salvo, not per bullet)
+    const tankReqs = this.enemyManager.tankFireRequests;
+    if (tankReqs.length > 0) {
       SoundManager.tankFire();
+      for (const req of tankReqs) {
+        this.tankBulletManager.fire(req.x, req.y, req.angle);
+      }
     }
     this.tankBulletManager.update(dt);
 

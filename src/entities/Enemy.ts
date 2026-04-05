@@ -405,18 +405,19 @@ export class EnemyManager {
     // Slow rotation
     e.mesh.rotation.z += e.rotationSpeed * dt;
 
-    // Fire bullet every TANK_FIRE_INTERVAL (skip during spawn pop)
+    // Fire 4 bullets in cross pattern every TANK_FIRE_INTERVAL (skip during spawn pop)
     if (e.age > SPAWN_POP_DURATION) {
       e.shootTimer += dt;
       if (e.shootTimer >= TANK_FIRE_INTERVAL) {
         e.shootTimer -= TANK_FIRE_INTERVAL;
-        // Fire in the direction the tank is currently facing
-        // mesh.rotation.z corresponds to the visual facing angle
-        this._tankFireRequests.push({
-          x: e.posX,
-          y: e.posY,
-          angle: e.mesh.rotation.z,
-        });
+        const baseAngle = e.mesh.rotation.z;
+        for (let i = 0; i < 4; i++) {
+          this._tankFireRequests.push({
+            x: e.posX,
+            y: e.posY,
+            angle: baseAngle + i * (Math.PI / 2),
+          });
+        }
       }
     }
 
