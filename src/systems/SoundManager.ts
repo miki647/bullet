@@ -57,6 +57,24 @@ class SoundManagerImpl {
     osc.stop(ctx.currentTime + 0.08);
   }
 
+  /** Tank fire — low menacing thump */
+  tankFire(): void {
+    const ctx = this.ensure();
+    if (!ctx || this._muted) return;
+    const t = ctx.currentTime;
+
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(220, t);
+    osc.frequency.exponentialRampToValueAtTime(80, t + 0.12);
+    gain.gain.setValueAtTime(0.12, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.12);
+    osc.connect(gain).connect(this.masterGain!);
+    osc.start(t);
+    osc.stop(t + 0.12);
+  }
+
   /** Enemy explosion — noise burst + low thud */
   explosion(intensity: number = 1): void {
     const ctx = this.ensure();

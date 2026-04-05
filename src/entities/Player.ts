@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { InputState } from '../systems/InputSystem';
-import { Game } from '../game/Game';
+import { Bounds } from '../utils/Bounds';
 import { createNeonShape, PLAYER_VERTICES, applyMicroVibration, createThrusterFlame } from '../rendering/NeonShapes';
 
 /** Lerp between two angles handling the -PI/+PI wrap */
@@ -71,9 +71,9 @@ export class Player {
     this.position.x += this.velocity.x * dt;
     this.position.y += this.velocity.y * dt;
 
-    // Clamp to world bounds
-    const halfW = Game.WORLD_WIDTH / 2;
-    const halfH = Game.WORLD_HEIGHT / 2;
+    // Clamp to play area bounds
+    const halfW = Bounds.halfW;
+    const halfH = Bounds.halfH;
     this.position.x = Math.max(-halfW, Math.min(halfW, this.position.x));
     this.position.y = Math.max(-halfH, Math.min(halfH, this.position.y));
 

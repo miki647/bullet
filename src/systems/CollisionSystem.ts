@@ -1,12 +1,13 @@
 import { BulletManager } from '../entities/Bullet';
 import { EnemyManager, type EnemyData } from '../entities/Enemy';
+import { TankBulletManager, TANK_BULLET_RADIUS } from '../entities/TankBullet';
 
 const PLAYER_RADIUS = 16; // player collision radius (smaller than visual for fairness)
 const BULLET_RADIUS = 8;
 const NEAR_MISS_EXTRA = 30; // extra distance beyond enemy radius for near-miss detection
 
 export interface CollisionEvent {
-  type: 'bullet_enemy' | 'bullet_enemy_hit' | 'enemy_player' | 'bullet_near_miss';
+  type: 'bullet_enemy' | 'bullet_enemy_hit' | 'enemy_player' | 'bullet_near_miss' | 'tank_bullet_player';
   enemyX: number;
   enemyY: number;
   enemyType: EnemyData['type'];
@@ -26,6 +27,7 @@ export class CollisionSystem {
     enemyManager: EnemyManager,
     playerX: number,
     playerY: number,
+    tankBulletManager?: TankBulletManager,
   ): ReadonlyArray<CollisionEvent> {
     this.events.length = 0;
 
@@ -127,6 +129,30 @@ export class CollisionSystem {
           enemyType: closestEnemy.type,
           enemyRef: closestEnemy,
         });
+      }
+    }
+
+    // Tank Bullet ↔ Player (circle-circle)
+    if (tankBulletManager) {
+      const tankBullets = tankBulletManager.activeBullets;
+      for (let ti = tankBullets.length - 1; ti >= 0; ti--) {
+        const tb = tankBullets[ti];
+        if (!tb.active) continue;
+
+        const dx = playerX - tb.posX;
+        const dy = playerY - tb.posY;
+        const distSq = dx * dx + dy * dy;
+        const r = PLAYER_RADIUS + TANK_BULLET_RADIUS;
+
+        if (distSq < r * r) {
+          this.events.push({
+            type: 'tank_bullet_player',
+            enemyX: tb.posX,
+            enemyY: tb.posY,
+            enemyType: 'tank',
+          });
+          tb.active = false; // bullet consumed
+        }
       }
     }
 

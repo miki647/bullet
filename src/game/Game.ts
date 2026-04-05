@@ -4,6 +4,7 @@ import { InputSystem } from '../systems/InputSystem';
 import { Player } from '../entities/Player';
 import { BulletManager } from '../entities/Bullet';
 import { EnemyManager } from '../entities/Enemy';
+import { TankBulletManager } from '../entities/TankBullet';
 import { WaveManager, type TransitionPhase } from './WaveManager';
 import { CollisionSystem } from '../systems/CollisionSystem';
 import { EngineTrail } from '../effects/EngineTrail';
@@ -24,6 +25,15 @@ import { HUD } from '../ui/HUD';
 import { StartScreen } from '../ui/StartScreen';
 import { GameOverScreen } from '../ui/GameOverScreen';
 import { SoundManager } from '../systems/SoundManager';
+import { Bounds } from '../utils/Bounds';
+
+// Pre-allocated colors to avoid GC pressure in hot loops
+const RING_COLOR_TANK = new THREE.Color(0xbb55ff);
+const RING_COLOR_SWARM = new THREE.Color(0x33ff88);
+const RING_COLOR_CHASER = new THREE.Color(0xff4444);
+const PARTICLE_COLOR_HIT = new THREE.Color(0xff2222);
+const PARTICLE_COLOR_DEATH = new THREE.Color(0x00ffff);
+const RING_COLOR_WAVE = new THREE.Color(0x00ffff);
 
 export class Game {
   private renderer!: THREE.WebGLRenderer;
@@ -37,6 +47,7 @@ export class Game {
   private engineTrail!: EngineTrail;
   private bulletManager!: BulletManager;
   private enemyManager!: EnemyManager;
+  private tankBulletManager!: TankBulletManager;
   private waveManager!: WaveManager;
   private collisionSystem!: CollisionSystem;
   private particleManager!: ParticleManager;
@@ -129,6 +140,8 @@ export class Game {
     );
     this.camera.position.set(0, 0, 100);
     this.camera.lookAt(0, 0, 0);
+
+    Bounds.update(halfW, halfH);
   }
 
   private initScene(): void {
@@ -161,6 +174,9 @@ export class Game {
     this.enemyManager = new EnemyManager();
     this.scene.add(this.enemyManager.group);
 
+    this.tankBulletManager = new TankBulletManager();
+    this.scene.add(this.tankBulletManager.group);
+
     this.waveManager = new WaveManager(this.enemyManager);
     this.collisionSystem = new CollisionSystem();
 
@@ -186,6 +202,9 @@ export class Game {
     this.camera.bottom = -halfH;
     this.camera.updateProjectionMatrix();
 
+    // Update dynamic play bounds to match camera view
+    Bounds.update(halfW, halfH);
+
     this.renderer.setSize(w, h);
     this.postProcessing?.setSize(w, h);
   }
@@ -208,6 +227,7 @@ export class Game {
     this.player.mesh.visible = true;
     this.bulletManager.reset();
     this.enemyManager.reset();
+    this.tankBulletManager.reset();
     this.waveManager.reset();
     this.scoreSystem.reset();
 
@@ -290,9 +310,16 @@ export class Game {
     this.bulletManager.update(dt);
 
     // Wave spawning & enemy AI
-    this.waveManager.update(dt, this.enemyManager.activeCount);
+    this.waveManager.update(dt, this.enemyManager.activeCount, this.player.position.x, this.player.position.y);
     this.handleWaveTransition();
     this.enemyManager.update(dt, this.player.position.x, this.player.position.y);
+
+    // Spawn tank bullets from fire requests
+    for (const req of this.enemyManager.tankFireRequests) {
+      this.tankBulletManager.fire(req.x, req.y, req.angle);
+      SoundManager.tankFire();
+    }
+    this.tankBulletManager.update(dt);
 
     // Collision detection
     const collisions = this.collisionSystem.check(
@@ -300,6 +327,7 @@ export class Game {
       this.enemyManager,
       this.player.position.x,
       this.player.position.y,
+      this.tankBulletManager,
     );
 
     // React to collisions
@@ -320,9 +348,9 @@ export class Game {
         this.particleManager.emitExplosion(ex, ey, event.enemyType, chain);
 
         // Shockwave ring (color per enemy type)
-        const ringColor = event.enemyType === 'tank' ? new THREE.Color(0xbb55ff)
-          : event.enemyType === 'swarm' ? new THREE.Color(0x33ff88)
-          : new THREE.Color(0xff4444);
+        const ringColor = event.enemyType === 'tank' ? RING_COLOR_TANK
+          : event.enemyType === 'swarm' ? RING_COLOR_SWARM
+          : RING_COLOR_CHASER;
         this.shockwaveRing.trigger(ex, ey, ringColor);
 
         // Grid shockwave distortion
@@ -345,15 +373,13 @@ export class Game {
         const shakeIntensity = baseShake + Math.min(chain, 10) * 1.5;
         this.screenShake.trigger(shakeIntensity, 0.2 + Math.min(chain * 0.02, 0.2));
 
-        // Slow motion on chain thresholds
+        // Slow motion on chain thresholds (only at higher chains)
         if (chain >= 10) {
-          this.slowMotion.trigger(0.15, 0.8);
+          this.slowMotion.trigger(0.15, 0.6);
         } else if (chain >= 8) {
-          this.slowMotion.trigger(0.2, 0.7);
+          this.slowMotion.trigger(0.25, 0.4);
         } else if (chain >= 5) {
-          this.slowMotion.trigger(0.3, 0.6);
-        } else if (chain >= 3) {
-          this.slowMotion.trigger(0.5, 0.4);
+          this.slowMotion.trigger(0.4, 0.3);
         }
       }
       if (event.type === 'bullet_enemy_hit') {
@@ -366,13 +392,13 @@ export class Game {
       if (event.type === 'bullet_near_miss' && event.enemyRef) {
         this.enemyManager.flashGlow(event.enemyRef);
       }
-      if (event.type === 'enemy_player') {
+      if (event.type === 'enemy_player' || event.type === 'tank_bullet_player') {
         const damaged = this.player.takeDamage();
         if (damaged) {
           SoundManager.playerHit();
           // Particle burst on hit
           this.particleManager.emit(event.enemyX, event.enemyY, 50, {
-            color: new THREE.Color(0xff2222),
+            color: PARTICLE_COLOR_HIT,
             baseSpeed: 200,
             maxLife: 0.8,
           });
@@ -387,7 +413,7 @@ export class Game {
             // Death explosion
             this.particleManager.emit(
               this.player.position.x, this.player.position.y, 200,
-              { color: new THREE.Color(0x00ffff), baseSpeed: 350, maxLife: 1.5 },
+              { color: PARTICLE_COLOR_DEATH, baseSpeed: 350, maxLife: 1.5 },
             );
             this.screenShake.trigger(30, 0.6);
             this.slowMotion.trigger(0.1, 1.0);
@@ -451,7 +477,7 @@ export class Game {
       case 'burst': {
         // Central shockwave burst
         this.particleManager.clearAttractor();
-        this.shockwaveRing.trigger(0, 0, new THREE.Color(0x00ffff));
+        this.shockwaveRing.trigger(0, 0, RING_COLOR_WAVE);
         this.neonGrid.addShockwave(0, 0);
         this.screenShake.trigger(15, 0.3);
         this.postProcessing.triggerKillFlash();

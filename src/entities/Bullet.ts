@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { Game } from '../game/Game';
+import { Bounds } from '../utils/Bounds';
 import { createBulletShape } from '../rendering/NeonShapes';
 import { ObjectPool } from '../utils/ObjectPool';
 
@@ -139,13 +139,15 @@ export class BulletManager {
   update(dt: number): void {
     this.fireCooldown = Math.max(0, this.fireCooldown - dt);
 
-    const halfW = Game.WORLD_WIDTH / 2 + 50; // margin
-    const halfH = Game.WORLD_HEIGHT / 2 + 50;
+    const halfW = Bounds.halfW + 50; // margin
+    const halfH = Bounds.halfH + 50;
 
     for (let i = this.bullets.length - 1; i >= 0; i--) {
       const b = this.bullets[i];
       if (!b.active) {
-        this.bullets.splice(i, 1);
+        // Swap-and-pop for O(1) removal
+        this.bullets[i] = this.bullets[this.bullets.length - 1];
+        this.bullets.pop();
         this.pool.release(b);
         continue;
       }
@@ -159,7 +161,9 @@ export class BulletManager {
       // Off-screen check
       if (b.posX < -halfW || b.posX > halfW || b.posY < -halfH || b.posY > halfH) {
         b.active = false;
-        this.bullets.splice(i, 1);
+        // Swap-and-pop
+        this.bullets[i] = this.bullets[this.bullets.length - 1];
+        this.bullets.pop();
         this.pool.release(b);
         continue;
       }
@@ -261,11 +265,13 @@ export class BulletManager {
   }
 
   reset(): void {
-    // Deactivate all bullets so next update cycle returns them to pool
     for (const b of this.bullets) {
       b.active = false;
       b.mesh.visible = false;
+      b.trail.visible = false;
+      this.pool.release(b);
     }
+    this.bullets.length = 0;
     this.fireCooldown = 0;
   }
 }

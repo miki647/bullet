@@ -1,4 +1,4 @@
-import { Game } from './Game';
+import { Bounds } from '../utils/Bounds';
 import { EnemyManager } from '../entities/Enemy';
 
 /**
@@ -51,7 +51,12 @@ export class WaveManager {
     this.restTimer = 1.5; // short initial delay
   }
 
-  update(dt: number, enemyCount: number): void {
+  private playerX = 0;
+  private playerY = 0;
+
+  update(dt: number, enemyCount: number, playerX = 0, playerY = 0): void {
+    this.playerX = playerX;
+    this.playerY = playerY;
     // --- Transition state machine ---
     if (this._transitionPhase !== 'none') {
       this._phaseJustStarted = false;
@@ -140,11 +145,11 @@ export class WaveManager {
     if (wave <= WAVE_DEFS.length) {
       return WAVE_DEFS[wave - 1];
     }
-    // Formula-based for wave 6+
+    // Smoothly scaling formula for wave 6+
     return {
-      chaserCount: 5 + wave * 2,
-      swarmCount: Math.max(0, (wave - 2) * 4),
-      tankCount: Math.max(0, Math.floor((wave - 4) / 2)),
+      chaserCount: 5 + wave,
+      swarmCount: Math.max(0, (wave - 2) * 2),
+      tankCount: Math.max(0, Math.floor((wave - 3) / 2)),
     };
   }
 
@@ -158,7 +163,7 @@ export class WaveManager {
         this.enemyManager.spawnChaser(pos.x, pos.y);
         break;
       case 'swarm':
-        this.enemyManager.spawnSwarm(pos.x, pos.y);
+        this.enemyManager.spawnSwarm(pos.x, pos.y, this.playerX, this.playerY);
         break;
       case 'tank':
         this.enemyManager.spawnTank(pos.x, pos.y);
@@ -167,19 +172,19 @@ export class WaveManager {
   }
 
   private randomEdgePosition(): { x: number; y: number } {
-    const halfW = Game.WORLD_WIDTH / 2 + SPAWN_MARGIN;
-    const halfH = Game.WORLD_HEIGHT / 2 + SPAWN_MARGIN;
+    const halfW = Bounds.halfW + SPAWN_MARGIN;
+    const halfH = Bounds.halfH + SPAWN_MARGIN;
 
     const side = Math.floor(Math.random() * 4);
     switch (side) {
       case 0:
-        return { x: (Math.random() - 0.5) * Game.WORLD_WIDTH, y: halfH };
+        return { x: (Math.random() - 0.5) * Bounds.halfW * 2, y: halfH };
       case 1:
-        return { x: (Math.random() - 0.5) * Game.WORLD_WIDTH, y: -halfH };
+        return { x: (Math.random() - 0.5) * Bounds.halfW * 2, y: -halfH };
       case 2:
-        return { x: -halfW, y: (Math.random() - 0.5) * Game.WORLD_HEIGHT };
+        return { x: -halfW, y: (Math.random() - 0.5) * Bounds.halfH * 2 };
       default:
-        return { x: halfW, y: (Math.random() - 0.5) * Game.WORLD_HEIGHT };
+        return { x: halfW, y: (Math.random() - 0.5) * Bounds.halfH * 2 };
     }
   }
 

@@ -490,7 +490,7 @@ UI는 Three.js 캔버스 위에 HTML/CSS로 오버레이. 게임 렌더링 성�
 | **Step 10** | 모바일 입력 (듀얼 조이스틱), 반응형 레이아웃 | 폰에서 조이스틱으로 플레이 가능 | ✅ 완료 |
 | **Step 11** | UI 구현 — HUD, StartScreen, GameOverScreen | 완전한 게임 흐름 (시작→플레이→게임오버→재시작) | ✅ 완료 |
 | **Step 12** | 사운드 효과, WebGPU 뱃지 표시, 파티클 카운터 UI | 폭발음, 발사음, 체인킬 사운드 | ✅ 완료 |
-| **Step 13** | 밸런싱, 버그 픽스, 성능 최적화 (프로파일링) | 모바일에서 안정적 30fps 이상 | ⬜ |
+| **Step 13** | 밸런싱, 버그 픽스, 성능 최적화 (프로파일링) | 모바일에서 안정적 30fps 이상 | ✅ 완료 |
 | **Step 14** | 배포 (Vercel/GitHub Pages), README, 최종 테스트 | 공유 가능한 URL 완성 | ⬜ |
 
 ### 완료된 작업 상세 (새 세션 참고용)
@@ -817,6 +817,44 @@ UI는 Three.js 캔버스 위에 HTML/CSS로 오버레이. 게임 렌더링 성�
 
 - 신규 파일: `src/systems/SoundManager.ts`
 - 수정 파일: `src/ui/HUD.ts`, `src/game/Game.ts`, `src/entities/Bullet.ts`
+</details>
+
+<details>
+<summary>Step 13 — 밸런싱, 버그 픽스, 성능 최적화 (완료)</summary>
+
+**동적 플레이 영역 (Bounds)** (`src/utils/Bounds.ts` 신규):
+- 카메라 뷰에 맞춘 동적 경계 시스템 (최소 360×480)
+- Player, Bullet, Enemy, WaveManager 모두 Bounds 참조로 교체
+- `Game.WORLD_WIDTH/HEIGHT` 하드코딩 → `Bounds.halfW/halfH` 동적 값
+- 리사이즈 시 자동 업데이트
+
+**Swarm 적 전면 리워크** (`src/entities/Enemy.ts`):
+- Boid AI 제거 → 직선 이동 + 화면 가장자리 반사 AI
+- 속도 200→400 (2배)
+- 스폰 시 플레이어 방향으로 초기 속도 설정
+- 화면 끝 도달 시 플레이어 방향으로 재조준 + 직선 이동 반복
+- 연결선 (LineSegments) + 클러스터 글로우 제거
+
+**GC 압력 최적화**:
+- `Game.ts`: 충돌 처리 루프의 `new THREE.Color()` 6개 → 모듈 레벨 상수로 사전 할당
+- `Enemy.ts`: `updateTankVisuals()`의 `COLOR_TANK.clone()` + `new THREE.Color()` → `_tmpColor` 재사용
+- `Enemy.ts`/`Bullet.ts`: `Array.splice()` → swap-and-pop O(1) 제거
+- `Enemy.ts`: Tank 장식 mesh children `traverse()` 매 프레임 → 생성 시 캐싱 (`tankInner/tankRing0/tankRing1`)
+
+**웨이브 밸런스 조정** (`src/game/WaveManager.ts`):
+- Wave 6+ 공식 완화: chasers `5+wave*2` → `5+wave`, swarm `(w-2)*4` → `(w-2)*2`, tank `(w-4)/2` → `(w-3)/2`
+- Wave 5→6 난이도 급등 해소
+
+**슬로모션 밸런스** (`src/game/Game.ts`):
+- chain ×3 슬로모션 제거 (너무 자주 발동)
+- chain ×5/×8/×10 지속시간 단축 (0.6/0.7/0.8 → 0.3/0.4/0.6)
+
+**reset() 즉시 정리**:
+- `EnemyManager.reset()`: 풀에 즉시 반환 + 배열 비움
+- `BulletManager.reset()`: 풀에 즉시 반환 + 배열 비움
+
+- 신규 파일: `src/utils/Bounds.ts`
+- 수정 파일: `src/game/Game.ts`, `src/entities/Enemy.ts`, `src/entities/Bullet.ts`, `src/entities/Player.ts`, `src/game/WaveManager.ts`
 </details>
 
 ---
