@@ -98,13 +98,13 @@ export class BulletManager {
     b.age = 0;
   }
 
-  tryFire(playerX: number, playerY: number, aimX: number, aimY: number): void {
-    if (this.fireCooldown > 0) return;
+  tryFire(playerX: number, playerY: number, aimX: number, aimY: number): boolean {
+    if (this.fireCooldown > 0) return false;
 
     const dx = aimX - playerX;
     const dy = aimY - playerY;
     const len = Math.sqrt(dx * dx + dy * dy);
-    if (len < 1) return;
+    if (len < 1) return false;
 
     const dirX = dx / len;
     const dirY = dy / len;
@@ -133,6 +133,7 @@ export class BulletManager {
 
     this.bullets.push(b);
     this.fireCooldown = FIRE_COOLDOWN;
+    return true;
   }
 
   update(dt: number): void {

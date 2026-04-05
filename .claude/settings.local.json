@@ -17,7 +17,8 @@
       "Bash(curl -L -o /tmp/kenney-space.zip \"https://github.com/kenney/kenney-assets/raw/main/Space%20Shooter%20Redux/space-shooter-redux.zip\")",
       "Bash(grep -E \"\\\\.\\(json|html\\)$\")",
       "Bash(npx tsc:*)",
-      "Bash(npx vite:*)"
+      "Bash(npx vite:*)",
+      "Bash(npm run:*)"
     ]
   }
 }

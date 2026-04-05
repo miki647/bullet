@@ -489,7 +489,7 @@ UI는 Three.js 캔버스 위에 HTML/CSS로 오버레이. 게임 렌더링 성�
 | **Step 9** | Game Feel — Screen Shake, SlowMotion, Hit Flash | 체인킬 ×5에서 슬로모션 + 화면 흔들림 작동 | ✅ 완료 |
 | **Step 10** | 모바일 입력 (듀얼 조이스틱), 반응형 레이아웃 | 폰에서 조이스틱으로 플레이 가능 | ✅ 완료 |
 | **Step 11** | UI 구현 — HUD, StartScreen, GameOverScreen | 완전한 게임 흐름 (시작→플레이→게임오버→재시작) | ✅ 완료 |
-| **Step 12** | 사운드 효과, WebGPU 뱃지 표시, 파티클 카운터 UI | 폭발음, 발사음, 체인킬 사운드 | ⬜ |
+| **Step 12** | 사운드 효과, WebGPU 뱃지 표시, 파티클 카운터 UI | 폭발음, 발사음, 체인킬 사운드 | ✅ 완료 |
 | **Step 13** | 밸런싱, 버그 픽스, 성능 최적화 (프로파일링) | 모바일에서 안정적 30fps 이상 | ⬜ |
 | **Step 14** | 배포 (Vercel/GitHub Pages), README, 최종 테스트 | 공유 가능한 URL 완성 | ⬜ |
 
@@ -777,6 +777,46 @@ UI는 Three.js 캔버스 위에 HTML/CSS로 오버레이. 게임 렌더링 성�
 
 - 신규 파일: `src/game/GameState.ts`, `src/ui/StartScreen.ts`, `src/ui/GameOverScreen.ts`
 - 수정 파일: `src/entities/Player.ts`, `src/ui/HUD.ts`, `src/game/Game.ts`, `src/entities/Bullet.ts`, `src/entities/Enemy.ts`, `src/game/WaveManager.ts`
+</details>
+
+<details>
+<summary>Step 12 — 사운드 효과, WebGPU 뱃지, 파티클 카운터 (완료)</summary>
+
+**SoundManager** (`src/systems/SoundManager.ts` 신규):
+- Web Audio API 기반 프로시저럴 사운드 (외부 오디오 파일 불필요)
+- 싱글톤 패턴, lazy AudioContext 생성 (유저 제스처 후 resume)
+- 사운드 목록:
+  - `fire()`: 총알 발사 — square wave 880→220Hz 피치 다운 (0.08초)
+  - `explosion(intensity)`: 적 폭발 — 노이즈 버스트 + 저음 thud, 체인에 비례 강도
+  - `tankExplosion()`: 탱크 폭발 — 강화 폭발 + 서브베이스 럼블 (0.5초)
+  - `hit()`: 비치명 피격 — triangle wave 핑 (0.06초)
+  - `chainMilestone(level)`: 체인 마일스톤 — 상승 코드 아르페지오 (nice: 2음, awesome: 3음, incredible: 4음, unstoppable: 4음 고음)
+  - `playerHit()`: 플레이어 피격 — sawtooth 디스토션 버즈 (0.25초)
+  - `playerDeath()`: 플레이어 사망 — 하강 sawtooth + 노이즈 스윕 (1.0초)
+  - `waveBurst()`: 웨이브 전환 버스트 — sine sweep 200→1200→100Hz
+  - `waveAnnounce()`: 웨이브 알림 — 3음 square wave 팡파레
+- 마스터 볼륨 0.35, 뮤트 토글 지원
+
+**HUD 업데이트** (`src/ui/HUD.ts` 수정):
+- 좌하단: WebGPU 뱃지 ("WebGPU ✓ | 50K particles" 또는 "WebGL2 ⚠ | 5K particles")
+  - WebGPU: 시안 (#00ffcc), WebGL2: 주황 (#ffaa44)
+- 좌하단: 실시간 파티클 카운터 ("Particles: 1234")
+- 우하단: 뮤트 토글 버튼 (♪)
+- `setBadge(tier, maxParticles)`, `updateParticleCount(active)` 메서드
+
+**Game.ts 통합** (`src/game/Game.ts` 수정):
+- `startPlaying()`: `SoundManager.resume()` 호출
+- 총알 발사 시 `SoundManager.fire()`
+- 적 킬 시 `SoundManager.explosion()` / `SoundManager.tankExplosion()`
+- 비치명 피격 시 `SoundManager.hit()`
+- 플레이어 피격/사망 시 `SoundManager.playerHit()` / `SoundManager.playerDeath()`
+- 웨이브 전환 시 `SoundManager.waveBurst()` / `SoundManager.waveAnnounce()`
+- 매 프레임 `hud.updateParticleCount()` 호출
+
+**Bullet.ts 수정**: `tryFire()` 반환 타입 `void` → `boolean` (발사 성공 여부)
+
+- 신규 파일: `src/systems/SoundManager.ts`
+- 수정 파일: `src/ui/HUD.ts`, `src/game/Game.ts`, `src/entities/Bullet.ts`
 </details>
 
 ---

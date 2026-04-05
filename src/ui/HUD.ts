@@ -1,8 +1,10 @@
 import { ScoreSystem, type ChainEvent } from '../systems/ScoreSystem';
+import type { RenderTier } from '../utils/DeviceDetect';
+import { SoundManager } from '../systems/SoundManager';
 
 /**
- * HUD — HTML overlay for score, wave, chain multiplier, and combo text.
- * All elements are created programmatically and appended to #game-container.
+ * HUD — HTML overlay for score, wave, chain multiplier, combo text,
+ * WebGPU badge, particle counter, and mute toggle.
  */
 
 const CHAIN_TEXT_MAP: Record<string, string> = {
@@ -29,6 +31,9 @@ export class HUD {
   private chainTextEl: HTMLElement;
   private hpBarEl: HTMLElement;
   private waveAnnounceEl: HTMLElement;
+  private badgeEl: HTMLElement;
+  private particleCountEl: HTMLElement;
+  private muteBtn: HTMLElement;
   private chainTextTimer = 0;
 
   constructor() {
@@ -54,6 +59,11 @@ export class HUD {
       </div>
       <div id="hud-chain-text"></div>
       <div id="hud-wave-announce"></div>
+      <div id="hud-bottom-left">
+        <div id="hud-badge"></div>
+        <div id="hud-particle-count"></div>
+      </div>
+      <div id="hud-mute-btn">♪</div>
     `;
     this.container.appendChild(hud);
 
@@ -65,6 +75,36 @@ export class HUD {
     this.chainTextEl = document.getElementById('hud-chain-text')!;
     this.hpBarEl = document.getElementById('hud-hp-bar')!;
     this.waveAnnounceEl = document.getElementById('hud-wave-announce')!;
+    this.badgeEl = document.getElementById('hud-badge')!;
+    this.particleCountEl = document.getElementById('hud-particle-count')!;
+    this.muteBtn = document.getElementById('hud-mute-btn')!;
+
+    // Mute button click handler
+    this.muteBtn.addEventListener('click', () => {
+      const muted = SoundManager.toggleMute();
+      this.muteBtn.textContent = muted ? '♪̶' : '♪';
+      this.muteBtn.style.opacity = muted ? '0.4' : '0.7';
+    });
+  }
+
+  /** Set the renderer badge (call once after init) */
+  setBadge(tier: RenderTier, maxParticles: number): void {
+    const isGPU = tier === 'webgpu';
+    const label = isGPU ? 'WebGPU' : 'WebGL2';
+    const check = isGPU ? '✓' : '⚠';
+    const pLabel = maxParticles >= 1000
+      ? `${(maxParticles / 1000).toFixed(0)}K`
+      : `${maxParticles}`;
+    this.badgeEl.textContent = `${label} ${check} | ${pLabel} particles`;
+    this.badgeEl.style.color = isGPU ? '#00ffcc' : '#ffaa44';
+    this.badgeEl.style.textShadow = isGPU
+      ? '0 0 8px rgba(0,255,204,0.5)'
+      : '0 0 8px rgba(255,170,68,0.3)';
+  }
+
+  /** Update live particle count */
+  updateParticleCount(active: number): void {
+    this.particleCountEl.textContent = `Particles: ${active}`;
   }
 
   show(): void { this.hudEl.style.display = 'block'; }
@@ -132,6 +172,7 @@ export class HUD {
   private showChainText(event: ChainEvent): void {
     const text = CHAIN_TEXT_MAP[event.threshold] ?? '';
     const color = CHAIN_COLOR_MAP[event.threshold] ?? '#ffffff';
+    SoundManager.chainMilestone(event.threshold as 'nice' | 'awesome' | 'incredible' | 'unstoppable');
 
     this.chainTextEl.textContent = text;
     this.chainTextEl.style.color = color;
@@ -267,5 +308,43 @@ const HUD_CSS = `
 #hud-wave-announce.visible {
   opacity: 1;
   transform: translate(-50%, -50%) scale(1);
+}
+
+#hud-bottom-left {
+  position: absolute;
+  bottom: 16px;
+  left: 24px;
+}
+
+#hud-badge {
+  font-size: 13px;
+  font-weight: bold;
+  color: #00ffcc;
+  letter-spacing: 1px;
+  opacity: 0.85;
+}
+
+#hud-particle-count {
+  font-size: 11px;
+  color: #6688aa;
+  margin-top: 2px;
+  letter-spacing: 0.5px;
+}
+
+#hud-mute-btn {
+  position: absolute;
+  bottom: 16px;
+  right: 24px;
+  font-size: 22px;
+  color: #ffffff;
+  opacity: 0.7;
+  cursor: pointer;
+  pointer-events: auto;
+  user-select: none;
+  transition: opacity 0.2s;
+}
+
+#hud-mute-btn:hover {
+  opacity: 1;
 }
 `;

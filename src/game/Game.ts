@@ -23,6 +23,7 @@ import { GameState } from './GameState';
 import { HUD } from '../ui/HUD';
 import { StartScreen } from '../ui/StartScreen';
 import { GameOverScreen } from '../ui/GameOverScreen';
+import { SoundManager } from '../systems/SoundManager';
 
 export class Game {
   private renderer!: THREE.WebGLRenderer;
@@ -97,6 +98,7 @@ export class Game {
 
     // Show start screen
     this.hud.hide();
+    this.hud.setBadge(this.tier, this.maxParticles);
     this.player.mesh.visible = false;
     this.startScreen.show(() => this.startPlaying());
 
@@ -196,6 +198,7 @@ export class Game {
   // ─── State transitions ──────────────────────────────────
 
   private startPlaying(): void {
+    SoundManager.resume();
     this.gameState.transition('PLAYING');
     this.startScreen.hide();
     this.gameOverScreen.hide();
@@ -278,10 +281,11 @@ export class Game {
     // Bullet firing & update
     if (this.inputSystem.state.firing) {
       const { aimPos } = this.inputSystem.state;
-      this.bulletManager.tryFire(
+      const fired = this.bulletManager.tryFire(
         this.player.position.x, this.player.position.y,
         aimPos.x, aimPos.y,
       );
+      if (fired) SoundManager.fire();
     }
     this.bulletManager.update(dt);
 
@@ -305,6 +309,13 @@ export class Game {
         const chain = this.scoreSystem.chainMultiplier;
         const ex = event.enemyX;
         const ey = event.enemyY;
+
+        // Sound: explosion (type-dependent)
+        if (event.enemyType === 'tank') {
+          SoundManager.tankExplosion();
+        } else {
+          SoundManager.explosion(Math.min(chain * 0.3, 2));
+        }
 
         this.particleManager.emitExplosion(ex, ey, event.enemyType, chain);
 
@@ -346,6 +357,7 @@ export class Game {
         }
       }
       if (event.type === 'bullet_enemy_hit') {
+        SoundManager.hit();
         // Non-lethal hit — trigger Tank hit pulse
         if (event.enemyType === 'tank') {
           this.enemyManager.triggerHitPulse(event.enemyX, event.enemyY);
@@ -357,6 +369,7 @@ export class Game {
       if (event.type === 'enemy_player') {
         const damaged = this.player.takeDamage();
         if (damaged) {
+          SoundManager.playerHit();
           // Particle burst on hit
           this.particleManager.emit(event.enemyX, event.enemyY, 50, {
             color: new THREE.Color(0xff2222),
@@ -369,6 +382,7 @@ export class Game {
 
           // Check for death
           if (this.player.hp <= 0) {
+            SoundManager.playerDeath();
             this.player.mesh.visible = false;
             // Death explosion
             this.particleManager.emit(
@@ -391,6 +405,7 @@ export class Game {
 
     // HUD overlay
     this.hud.update(dt, this.scoreSystem);
+    this.hud.updateParticleCount(this.particleManager.activeCount);
   }
 
   get renderTier(): RenderTier {
@@ -440,12 +455,14 @@ export class Game {
         this.neonGrid.addShockwave(0, 0);
         this.screenShake.trigger(15, 0.3);
         this.postProcessing.triggerKillFlash();
+        SoundManager.waveBurst();
         break;
       }
 
       case 'text':
         // Show wave announcement (next wave number)
         this.hud.showWaveAnnounce(this.waveManager.currentWave + 1);
+        SoundManager.waveAnnounce();
         break;
 
       case 'rest':
