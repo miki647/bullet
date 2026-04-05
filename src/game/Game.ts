@@ -314,7 +314,7 @@ export class Game {
         if (event.enemyType === 'tank') {
           SoundManager.tankExplosion();
         } else {
-          SoundManager.explosion(Math.min(chain * 0.3, 2));
+          SoundManager.explosion(0.8 + Math.min(chain * 0.15, 1.2));
         }
 
         this.particleManager.emitExplosion(ex, ey, event.enemyType, chain);

@@ -35,6 +35,8 @@ export class HUD {
   private particleCountEl: HTMLElement;
   private muteBtn: HTMLElement;
   private chainTextTimer = 0;
+  private chainSoundsPlayed = new Set<string>();
+  private lastWave = 0;
 
   constructor() {
     this.container = document.getElementById('game-container')!;
@@ -127,8 +129,13 @@ export class HUD {
     // Score
     this.scoreEl.textContent = `SCORE: ${scoreSystem.score.toLocaleString()}`;
 
-    // Wave
-    this.waveEl.textContent = `WAVE ${scoreSystem.wave}`;
+    // Wave — reset chain sounds on new wave
+    const wave = scoreSystem.wave;
+    if (wave !== this.lastWave) {
+      this.lastWave = wave;
+      this.chainSoundsPlayed.clear();
+    }
+    this.waveEl.textContent = `WAVE ${wave}`;
 
     // Chain multiplier
     const chain = scoreSystem.chainMultiplier;
@@ -172,7 +179,10 @@ export class HUD {
   private showChainText(event: ChainEvent): void {
     const text = CHAIN_TEXT_MAP[event.threshold] ?? '';
     const color = CHAIN_COLOR_MAP[event.threshold] ?? '#ffffff';
-    SoundManager.chainMilestone(event.threshold as 'nice' | 'awesome' | 'incredible' | 'unstoppable');
+    if (!this.chainSoundsPlayed.has(event.threshold)) {
+      this.chainSoundsPlayed.add(event.threshold);
+      SoundManager.chainMilestone(event.threshold as 'nice' | 'awesome' | 'incredible' | 'unstoppable');
+    }
 
     this.chainTextEl.textContent = text;
     this.chainTextEl.style.color = color;
