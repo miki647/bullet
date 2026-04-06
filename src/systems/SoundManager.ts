@@ -272,6 +272,121 @@ class SoundManagerImpl {
       osc.stop(start + 0.2);
     });
   }
+
+  /** Item pickup — bright positive chime */
+  itemPickup(): void {
+    const ctx = this.ensure();
+    if (!ctx || this._muted) return;
+    const t = ctx.currentTime;
+
+    [1047, 1319].forEach((freq, i) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'triangle';
+      const start = t + i * 0.06;
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0.15, start);
+      gain.gain.exponentialRampToValueAtTime(0.001, start + 0.2);
+      osc.connect(gain).connect(this.masterGain!);
+      osc.start(start);
+      osc.stop(start + 0.2);
+    });
+  }
+
+  /** Bomb activation — deep powerful boom + rising sweep */
+  bombActivate(): void {
+    const ctx = this.ensure();
+    if (!ctx || this._muted) return;
+    const t = ctx.currentTime;
+
+    // Deep sub-bass boom
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(80, t);
+    osc.frequency.exponentialRampToValueAtTime(20, t + 0.5);
+    gain.gain.setValueAtTime(0.35, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.5);
+    osc.connect(gain).connect(this.masterGain!);
+    osc.start(t);
+    osc.stop(t + 0.5);
+
+    // Noise burst
+    const bufSize = ctx.sampleRate * 0.3;
+    const buf = ctx.createBuffer(1, bufSize, ctx.sampleRate);
+    const ch = buf.getChannelData(0);
+    for (let i = 0; i < bufSize; i++) ch[i] = (Math.random() * 2 - 1) * 0.4;
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    const ng = ctx.createGain();
+    ng.gain.setValueAtTime(0.25, t);
+    ng.gain.exponentialRampToValueAtTime(0.001, t + 0.3);
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.value = 600;
+    src.connect(filter).connect(ng).connect(this.masterGain!);
+    src.start(t);
+    src.stop(t + 0.3);
+
+    // Rising sweep
+    const osc2 = ctx.createOscillator();
+    const gain2 = ctx.createGain();
+    osc2.type = 'sine';
+    osc2.frequency.setValueAtTime(200, t + 0.05);
+    osc2.frequency.exponentialRampToValueAtTime(2000, t + 0.3);
+    gain2.gain.setValueAtTime(0.1, t + 0.05);
+    gain2.gain.exponentialRampToValueAtTime(0.001, t + 0.35);
+    osc2.connect(gain2).connect(this.masterGain!);
+    osc2.start(t + 0.05);
+    osc2.stop(t + 0.35);
+  }
+
+  /** Barrier activation — ethereal shield-up shimmer */
+  barrierActivate(): void {
+    const ctx = this.ensure();
+    if (!ctx || this._muted) return;
+    const t = ctx.currentTime;
+
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(300, t);
+    osc.frequency.exponentialRampToValueAtTime(1200, t + 0.3);
+    gain.gain.setValueAtTime(0.12, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.4);
+    osc.connect(gain).connect(this.masterGain!);
+    osc.start(t);
+    osc.stop(t + 0.4);
+
+    const osc2 = ctx.createOscillator();
+    const gain2 = ctx.createGain();
+    osc2.type = 'sine';
+    osc2.frequency.setValueAtTime(600, t + 0.05);
+    osc2.frequency.exponentialRampToValueAtTime(2400, t + 0.35);
+    gain2.gain.setValueAtTime(0.06, t + 0.05);
+    gain2.gain.exponentialRampToValueAtTime(0.001, t + 0.4);
+    osc2.connect(gain2).connect(this.masterGain!);
+    osc2.start(t + 0.05);
+    osc2.stop(t + 0.4);
+  }
+
+  /** Barrier deactivation — short descending tone */
+  barrierDeactivate(): void {
+    const ctx = this.ensure();
+    if (!ctx || this._muted) return;
+    const t = ctx.currentTime;
+
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(800, t);
+    osc.frequency.exponentialRampToValueAtTime(200, t + 0.15);
+    gain.gain.setValueAtTime(0.08, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.15);
+    osc.connect(gain).connect(this.masterGain!);
+    osc.start(t);
+    osc.stop(t + 0.15);
+  }
 }
 
 /** Singleton */

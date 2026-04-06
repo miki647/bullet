@@ -1,18 +1,21 @@
 import { BulletManager } from '../entities/Bullet';
 import { EnemyManager, type EnemyData } from '../entities/Enemy';
 import { TankBulletManager, TANK_BULLET_RADIUS } from '../entities/TankBullet';
+import { ItemManager, type ItemData } from '../entities/Item';
 
 const PLAYER_RADIUS = 16; // player collision radius (smaller than visual for fairness)
 const BULLET_RADIUS = 8;
 const NEAR_MISS_EXTRA = 30; // extra distance beyond enemy radius for near-miss detection
 
 export interface CollisionEvent {
-  type: 'bullet_enemy' | 'bullet_enemy_hit' | 'enemy_player' | 'bullet_near_miss' | 'tank_bullet_player';
+  type: 'bullet_enemy' | 'bullet_enemy_hit' | 'enemy_player' | 'bullet_near_miss' | 'tank_bullet_player' | 'item_player';
   enemyX: number;
   enemyY: number;
   enemyType: EnemyData['type'];
   /** For near miss: the enemy data reference (to flashGlow). */
   enemyRef?: EnemyData;
+  /** For item pickup: the item data reference. */
+  itemRef?: ItemData;
 }
 
 export class CollisionSystem {
@@ -28,6 +31,7 @@ export class CollisionSystem {
     playerX: number,
     playerY: number,
     tankBulletManager?: TankBulletManager,
+    itemManager?: ItemManager,
   ): ReadonlyArray<CollisionEvent> {
     this.events.length = 0;
 
@@ -152,6 +156,31 @@ export class CollisionSystem {
             enemyType: 'tank',
           });
           tb.active = false; // bullet consumed
+        }
+      }
+    }
+
+    // Item ↔ Player (circle-circle pickup)
+    if (itemManager) {
+      const items = itemManager.activeItems;
+      for (let ii = items.length - 1; ii >= 0; ii--) {
+        const item = items[ii];
+        if (!item.active) continue;
+
+        const dx = playerX - item.posX;
+        const dy = playerY - item.posY;
+        const distSq = dx * dx + dy * dy;
+        const r = PLAYER_RADIUS + item.radius;
+
+        if (distSq < r * r) {
+          this.events.push({
+            type: 'item_player',
+            enemyX: item.posX,
+            enemyY: item.posY,
+            enemyType: 'chaser', // unused for item events
+            itemRef: item,
+          });
+          itemManager.collect(item);
         }
       }
     }

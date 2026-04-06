@@ -1,6 +1,7 @@
 import { ScoreSystem, type ChainEvent } from '../systems/ScoreSystem';
 import type { RenderTier } from '../utils/DeviceDetect';
 import { SoundManager } from '../systems/SoundManager';
+import { type PowerUpState, DOUBLE_SHOT_DURATION, OMNI_SHOT_DURATION, BARRIER_DURATION, BOMB_MAX } from '../systems/PowerUpSystem';
 
 /**
  * HUD — HTML overlay for score, wave, chain multiplier, combo text,
@@ -34,9 +35,15 @@ export class HUD {
   private badgeEl: HTMLElement;
   private particleCountEl: HTMLElement;
   private muteBtn: HTMLElement;
+  private bombsEl: HTMLElement;
+  private bombBtnEl: HTMLElement;
+  private powerupDoubleShotEl: HTMLElement;
+  private powerupOmniShotEl: HTMLElement;
+  private powerupBarrierEl: HTMLElement;
   private chainTextTimer = 0;
   private chainSoundsPlayed = new Set<string>();
   private lastWave = 0;
+  private _bombTapped = false;
 
   constructor() {
     this.container = document.getElementById('game-container')!;
@@ -54,6 +61,20 @@ export class HUD {
         <div id="hud-score">SCORE: 0</div>
         <div id="hud-wave">WAVE 1</div>
         <div id="hud-hp-bar-bg"><div id="hud-hp-bar"></div></div>
+        <div id="hud-powerups">
+          <div id="hud-powerup-doubleshot" class="hud-powerup-bar">
+            <span class="hud-powerup-label">2x SHOT</span>
+            <div class="hud-powerup-fill-bg"><div class="hud-powerup-fill" style="background: #ffff00"></div></div>
+          </div>
+          <div id="hud-powerup-omnishot" class="hud-powerup-bar">
+            <span class="hud-powerup-label">OMNI</span>
+            <div class="hud-powerup-fill-bg"><div class="hud-powerup-fill" style="background: #00ffff"></div></div>
+          </div>
+          <div id="hud-powerup-barrier" class="hud-powerup-bar">
+            <span class="hud-powerup-label">BARRIER</span>
+            <div class="hud-powerup-fill-bg"><div class="hud-powerup-fill" style="background: #4488ff"></div></div>
+          </div>
+        </div>
       </div>
       <div id="hud-top-right">
         <div id="hud-chain">×1</div>
@@ -65,6 +86,8 @@ export class HUD {
         <div id="hud-badge"></div>
         <div id="hud-particle-count"></div>
       </div>
+      <div id="hud-bombs"></div>
+      <div id="hud-bomb-btn">💣 BOMB [SPACE]</div>
       <div id="hud-mute-btn">♪</div>
     `;
     this.container.appendChild(hud);
@@ -80,12 +103,24 @@ export class HUD {
     this.badgeEl = document.getElementById('hud-badge')!;
     this.particleCountEl = document.getElementById('hud-particle-count')!;
     this.muteBtn = document.getElementById('hud-mute-btn')!;
+    this.bombsEl = document.getElementById('hud-bombs')!;
+    this.bombBtnEl = document.getElementById('hud-bomb-btn')!;
+    this.powerupDoubleShotEl = document.getElementById('hud-powerup-doubleshot')!;
+    this.powerupOmniShotEl = document.getElementById('hud-powerup-omnishot')!;
+    this.powerupBarrierEl = document.getElementById('hud-powerup-barrier')!;
 
     // Mute button click handler
     this.muteBtn.addEventListener('click', () => {
       const muted = SoundManager.toggleMute();
       this.muteBtn.textContent = muted ? '♪̶' : '♪';
       this.muteBtn.style.opacity = muted ? '0.4' : '0.7';
+    });
+
+    // Bomb button click/touch handler
+    this.bombBtnEl.addEventListener('click', () => { this._bombTapped = true; });
+    this.bombBtnEl.addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      this._bombTapped = true;
     });
   }
 
@@ -190,6 +225,42 @@ export class HUD {
     this.chainTextEl.style.opacity = '1';
     this.chainTextEl.style.transform = 'translate(-50%, -50%) scale(1)';
     this.chainTextTimer = 1.2; // show for 1.2 seconds
+  }
+
+  /** Update bomb count display */
+  updateBombs(count: number): void {
+    let html = '';
+    for (let i = 0; i < BOMB_MAX; i++) {
+      const filled = i < count;
+      html += `<div class="hud-bomb-icon ${filled ? 'filled' : 'empty'}"></div>`;
+    }
+    this.bombsEl.innerHTML = html;
+  }
+
+  /** Update active powerup timer bars */
+  updatePowerUps(state: Readonly<PowerUpState>): void {
+    this.updatePowerUpBar(this.powerupDoubleShotEl, state.doubleShotTimer, DOUBLE_SHOT_DURATION);
+    this.updatePowerUpBar(this.powerupOmniShotEl, state.omniShotTimer, OMNI_SHOT_DURATION);
+    this.updatePowerUpBar(this.powerupBarrierEl, state.barrierTimer, BARRIER_DURATION);
+  }
+
+  private updatePowerUpBar(el: HTMLElement, timer: number, maxDuration: number): void {
+    if (timer <= 0) {
+      el.style.display = 'none';
+    } else {
+      el.style.display = 'flex';
+      const fill = el.querySelector('.hud-powerup-fill') as HTMLElement;
+      if (fill) fill.style.width = `${(timer / maxDuration) * 100}%`;
+    }
+  }
+
+  /** Consume bomb button tap (one-shot) */
+  consumeBombTap(): boolean {
+    if (this._bombTapped) {
+      this._bombTapped = false;
+      return true;
+    }
+    return false;
   }
 
   showWaveAnnounce(wave: number): void {
@@ -355,6 +426,92 @@ const HUD_CSS = `
 }
 
 #hud-mute-btn:hover {
+  opacity: 1;
+}
+
+#hud-powerups {
+  margin-top: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.hud-powerup-bar {
+  display: none;
+  align-items: center;
+  gap: 6px;
+  height: 14px;
+}
+
+.hud-powerup-label {
+  font-size: 10px;
+  color: #aaccdd;
+  width: 56px;
+  text-align: right;
+  letter-spacing: 0.5px;
+}
+
+.hud-powerup-fill-bg {
+  flex: 1;
+  width: 100px;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.hud-powerup-fill {
+  height: 100%;
+  width: 100%;
+  border-radius: 2px;
+  transition: width 0.1s linear;
+}
+
+#hud-bombs {
+  position: absolute;
+  bottom: 50px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 8px;
+}
+
+.hud-bomb-icon {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2px solid #ff6644;
+  transition: background 0.2s;
+}
+
+.hud-bomb-icon.filled {
+  background: radial-gradient(circle, #ff8844 30%, #ff6644 100%);
+  box-shadow: 0 0 8px rgba(255, 102, 68, 0.5);
+}
+
+.hud-bomb-icon.empty {
+  background: transparent;
+  opacity: 0.3;
+}
+
+#hud-bomb-btn {
+  position: absolute;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 13px;
+  color: #ff8844;
+  opacity: 0.6;
+  pointer-events: auto;
+  cursor: pointer;
+  user-select: none;
+  letter-spacing: 1px;
+  text-shadow: 0 0 6px rgba(255, 136, 68, 0.3);
+  transition: opacity 0.2s;
+  -webkit-tap-highlight-color: transparent;
+}
+
+#hud-bomb-btn:hover {
   opacity: 1;
 }
 `;

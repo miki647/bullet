@@ -21,15 +21,19 @@ export class Player {
   static readonly MAX_HP = 5;
   private _hp = Player.MAX_HP;
   private _invincibleTimer = 0; // seconds of invincibility after hit
+  private _barrierActive = false;
   private thrusterFlame: THREE.Group;
   private elapsed = 0;
 
   get hp(): number { return this._hp; }
   get maxHp(): number { return Player.MAX_HP; }
   get invincible(): boolean { return this._invincibleTimer > 0; }
+  get barrierActive(): boolean { return this._barrierActive; }
+  set barrierActive(v: boolean) { this._barrierActive = v; }
 
   takeDamage(amount = 1): boolean {
     if (this._invincibleTimer > 0) return false;
+    if (this._barrierActive) return false;
     this._hp = Math.max(0, this._hp - amount);
     this._invincibleTimer = 1.0; // 1 second invincibility
     return true;
@@ -38,6 +42,7 @@ export class Player {
   reset(): void {
     this._hp = Player.MAX_HP;
     this._invincibleTimer = 0;
+    this._barrierActive = false;
     this.position.set(0, 0);
     this.mesh.position.set(0, 0, 1);
     this.mesh.rotation.z = 0;

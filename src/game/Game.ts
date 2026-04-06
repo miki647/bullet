@@ -26,6 +26,9 @@ import { StartScreen } from '../ui/StartScreen';
 import { GameOverScreen } from '../ui/GameOverScreen';
 import { SoundManager } from '../systems/SoundManager';
 import { Bounds } from '../utils/Bounds';
+import { ItemManager, ITEM_COLORS } from '../entities/Item';
+import { PowerUpSystem, BOMB_MAX } from '../systems/PowerUpSystem';
+import { BarrierEffect } from '../effects/BarrierEffect';
 
 // Pre-allocated colors to avoid GC pressure in hot loops
 const RING_COLOR_TANK = new THREE.Color(0xbb55ff);
@@ -67,6 +70,10 @@ export class Game {
   private shockwaveRing!: ShockwaveRing;
   private tankDebris!: TankDebris;
   private cameraSystem!: CameraSystem;
+  private itemManager!: ItemManager;
+  private powerUpSystem!: PowerUpSystem;
+  private barrierEffect!: BarrierEffect;
+  private wasBarrierActive = false;
 
   private lastTime = 0;
   private elapsed = 0;
@@ -185,6 +192,14 @@ export class Game {
 
     this.scoreSystem = new ScoreSystem();
     this.hud = new HUD();
+
+    this.itemManager = new ItemManager();
+    this.scene.add(this.itemManager.group);
+
+    this.powerUpSystem = new PowerUpSystem();
+
+    this.barrierEffect = new BarrierEffect();
+    this.scene.add(this.barrierEffect.group);
   }
 
   private onResize(): void {
@@ -230,9 +245,14 @@ export class Game {
     this.tankBulletManager.reset();
     this.waveManager.reset();
     this.scoreSystem.reset();
+    this.itemManager.reset();
+    this.powerUpSystem.reset();
+    this.barrierEffect.deactivate();
+    this.wasBarrierActive = false;
 
     this.hud.show();
     this.hud.updateHP(this.player.hp, this.player.maxHp);
+    this.hud.updateBombs(this.powerUpSystem.bombCount);
   }
 
   private onGameOver(): void {
@@ -298,12 +318,24 @@ export class Game {
     this.player.update(dt, this.inputSystem.state);
     this.engineTrail.update(this.player.position.x, this.player.position.y);
 
-    // Bullet firing & update
+    // Bomb activation (spacebar or HUD button)
+    const bombInput = this.inputSystem.state.bombActivated || this.hud.consumeBombTap();
+    if (bombInput) {
+      const activated = this.powerUpSystem.activateBomb();
+      if (activated) {
+        this.executeBomb();
+        this.hud.updateBombs(this.powerUpSystem.bombCount);
+      }
+    }
+
+    // Bullet firing & update (pass powerup flags)
     if (this.inputSystem.state.firing) {
       const { aimPos } = this.inputSystem.state;
       const fired = this.bulletManager.tryFire(
         this.player.position.x, this.player.position.y,
         aimPos.x, aimPos.y,
+        this.powerUpSystem.hasDoubleShot,
+        this.powerUpSystem.hasOmniShot,
       );
       if (fired) SoundManager.fire();
     }
@@ -324,13 +356,17 @@ export class Game {
     }
     this.tankBulletManager.update(dt);
 
-    // Collision detection
+    // Item drops update
+    this.itemManager.update(dt);
+
+    // Collision detection (including items)
     const collisions = this.collisionSystem.check(
       this.bulletManager,
       this.enemyManager,
       this.player.position.x,
       this.player.position.y,
       this.tankBulletManager,
+      this.itemManager,
     );
 
     // React to collisions
@@ -384,6 +420,9 @@ export class Game {
         } else if (chain >= 5) {
           this.slowMotion.trigger(0.4, 0.3);
         }
+
+        // Item drop chance
+        this.itemManager.trySpawnDrop(ex, ey);
       }
       if (event.type === 'bullet_enemy_hit') {
         SoundManager.hit();
@@ -394,6 +433,26 @@ export class Game {
       }
       if (event.type === 'bullet_near_miss' && event.enemyRef) {
         this.enemyManager.flashGlow(event.enemyRef);
+      }
+      if (event.type === 'item_player' && event.itemRef) {
+        SoundManager.itemPickup();
+        this.powerUpSystem.collectItem(event.itemRef.type);
+
+        // Pickup visual effect
+        const itemColor = ITEM_COLORS[event.itemRef.type];
+        this.particleManager.emit(event.enemyX, event.enemyY, 30, {
+          color: itemColor,
+          baseSpeed: 150,
+          maxLife: 0.5,
+        });
+
+        // Type-specific feedback
+        if (event.itemRef.type === 'barrier') {
+          SoundManager.barrierActivate();
+        }
+        if (event.itemRef.type === 'bomb') {
+          this.hud.updateBombs(this.powerUpSystem.bombCount);
+        }
       }
       if (event.type === 'enemy_player' || event.type === 'tank_bullet_player') {
         const damaged = this.player.takeDamage();
@@ -428,6 +487,21 @@ export class Game {
       }
     }
 
+    // PowerUp timers
+    this.powerUpSystem.update(dt);
+
+    // Barrier sync
+    const barrierActive = this.powerUpSystem.hasBarrier;
+    this.player.barrierActive = barrierActive;
+    if (barrierActive && !this.wasBarrierActive) {
+      this.barrierEffect.activate();
+    } else if (!barrierActive && this.wasBarrierActive) {
+      this.barrierEffect.deactivate();
+      SoundManager.barrierDeactivate();
+    }
+    this.wasBarrierActive = barrierActive;
+    this.barrierEffect.update(dt, this.player.position.x, this.player.position.y);
+
     // Score & chain timer
     this.scoreSystem.wave = this.waveManager.currentWave;
     this.scoreSystem.update(dt);
@@ -435,6 +509,37 @@ export class Game {
     // HUD overlay
     this.hud.update(dt, this.scoreSystem);
     this.hud.updateParticleCount(this.particleManager.activeCount);
+    this.hud.updatePowerUps(this.powerUpSystem.state);
+  }
+
+  /** Execute bomb: kill all Chasers/Swarms, delete all TankBullets */
+  private executeBomb(): void {
+    SoundManager.bombActivate();
+
+    // Kill all chasers and swarms
+    const enemies = this.enemyManager.activeEnemies;
+    for (let i = enemies.length - 1; i >= 0; i--) {
+      const e = enemies[i];
+      if (!e.active) continue;
+      if (e.type === 'chaser' || e.type === 'swarm') {
+        this.particleManager.emitExplosion(e.posX, e.posY, e.type, 1);
+        this.scoreSystem.registerKill(e.type);
+        this.enemyManager.kill(e);
+      }
+    }
+
+    // Delete all tank bullets
+    this.tankBulletManager.reset();
+
+    // Visual feedback
+    this.screenShake.trigger(25, 0.4);
+    this.slowMotion.trigger(0.15, 0.5);
+    this.shockwaveRing.trigger(
+      this.player.position.x,
+      this.player.position.y,
+      new THREE.Color(0xff8844),
+    );
+    this.postProcessing.triggerKillFlash();
   }
 
   get renderTier(): RenderTier {

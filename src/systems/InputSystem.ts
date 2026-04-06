@@ -9,6 +9,8 @@ export interface InputState {
   aimPos: THREE.Vector2;
   /** Whether fire button is held */
   firing: boolean;
+  /** True for one frame when bomb key (Space) is pressed */
+  bombActivated: boolean;
 }
 
 export class InputSystem {
@@ -22,11 +24,13 @@ export class InputSystem {
 
   /** Last aim direction for mobile (persists when aim stick is released) */
   private lastAimDir = new THREE.Vector2(0, 1);
+  private spaceWasDown = false;
 
   readonly state: InputState = {
     moveDir: new THREE.Vector2(),
     aimPos: new THREE.Vector2(),
     firing: false,
+    bombActivated: false,
   };
 
   constructor(canvas: HTMLCanvasElement, camera: THREE.OrthographicCamera) {
@@ -99,6 +103,11 @@ export class InputSystem {
 
     this.state.aimPos.set(worldX, worldY);
     this.state.firing = this.mouseDown;
+
+    // Bomb: edge-triggered on Space key
+    const spaceDown = this.keys.get('Space') ?? false;
+    this.state.bombActivated = spaceDown && !this.spaceWasDown;
+    this.spaceWasDown = spaceDown;
   }
 
   private updateMobile(playerX: number, playerY: number): void {
@@ -120,6 +129,9 @@ export class InputSystem {
 
     // Auto-fire while aim stick is active
     this.state.firing = mc.aimStick.active;
+
+    // Mobile bomb activation is handled by HUD button, not joystick
+    this.state.bombActivated = false;
   }
 
   dispose(): void {

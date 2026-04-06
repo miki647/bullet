@@ -98,7 +98,12 @@ export class BulletManager {
     b.age = 0;
   }
 
-  tryFire(playerX: number, playerY: number, aimX: number, aimY: number): boolean {
+  tryFire(
+    playerX: number, playerY: number,
+    aimX: number, aimY: number,
+    doubleShot = false,
+    omniShot = false,
+  ): boolean {
     if (this.fireCooldown > 0) return false;
 
     const dx = aimX - playerX;
@@ -109,12 +114,47 @@ export class BulletManager {
     const dirX = dx / len;
     const dirY = dy / len;
 
+    if (omniShot) {
+      // 4 directions: front, left (90 CCW), right (90 CW), back
+      const dirs = [
+        { x: dirX, y: dirY },      // front
+        { x: -dirY, y: dirX },     // left
+        { x: dirY, y: -dirX },     // right
+        { x: -dirX, y: -dirY },    // back
+      ];
+      for (let i = 0; i < dirs.length; i++) {
+        const d = dirs[i];
+        if (i === 0 && doubleShot) {
+          // Front gets double: offset left and right perpendicular
+          const perpX = -d.y;
+          const perpY = d.x;
+          this.spawnBullet(playerX + perpX * 10, playerY + perpY * 10, d.x, d.y);
+          this.spawnBullet(playerX - perpX * 10, playerY - perpY * 10, d.x, d.y);
+        } else {
+          this.spawnBullet(playerX, playerY, d.x, d.y);
+        }
+      }
+    } else if (doubleShot) {
+      // Double shot only: 2 bullets offset left/right
+      const perpX = -dirY;
+      const perpY = dirX;
+      this.spawnBullet(playerX + perpX * 10, playerY + perpY * 10, dirX, dirY);
+      this.spawnBullet(playerX - perpX * 10, playerY - perpY * 10, dirX, dirY);
+    } else {
+      // Normal single shot
+      this.spawnBullet(playerX, playerY, dirX, dirY);
+    }
+
+    this.fireCooldown = FIRE_COOLDOWN;
+    return true;
+  }
+
+  private spawnBullet(originX: number, originY: number, dirX: number, dirY: number): void {
     const b = this.pool.acquire();
     b.active = true;
     b.age = 0;
-    // Spawn slightly ahead of player
-    b.posX = playerX + dirX * 25;
-    b.posY = playerY + dirY * 25;
+    b.posX = originX + dirX * 25;
+    b.posY = originY + dirY * 25;
     b.velX = dirX * BULLET_SPEED;
     b.velY = dirY * BULLET_SPEED;
 
@@ -132,8 +172,6 @@ export class BulletManager {
     }
 
     this.bullets.push(b);
-    this.fireCooldown = FIRE_COOLDOWN;
-    return true;
   }
 
   update(dt: number): void {
