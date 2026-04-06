@@ -6,9 +6,9 @@ export type ItemType = 'bomb' | 'double_shot' | 'omni_shot' | 'barrier';
 
 // ─── Drop Probabilities (easily tunable) ───────────────
 export const DROP_CHANCE_BOMB = 0.02;        // 2%
-export const DROP_CHANCE_DOUBLE_SHOT = 0.15; // 15%
-export const DROP_CHANCE_OMNI_SHOT = 0.10;   // 10%
-export const DROP_CHANCE_BARRIER = 0.05;     // 5%
+export const DROP_CHANCE_DOUBLE_SHOT = 0.10; // 10%
+export const DROP_CHANCE_OMNI_SHOT = 0.05;   // 5%
+export const DROP_CHANCE_BARRIER = 0.02;     // 2%
 
 // ─── Item Constants ────────────────────────────────────
 export const ITEM_LIFETIME = 10.0;
